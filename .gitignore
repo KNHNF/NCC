@@ -17,3 +17,4 @@ GEMINI_API_KEY*
 # os
 .DS_Store
 Thumbs.db
+best_model.pth
