@@ -23,3 +23,18 @@ best_model.pth
 *.pth
 *.zip
 output/new output/
+output/__huggingface_repos__.json
+output/__results___files/
+
+# superseded by the pass/fail pair
+output/figures/pipeline_demo.png
+
+# scratch working notes and personal messages, not repo documentation
+TEAM-NEXT-STEPS.md
+akilesh-update-and-ask.md
+
+# demo source images copied out of the challenge dataset for recording
+demo-images/
+
+# gradio runtime cache
+.gradio/
