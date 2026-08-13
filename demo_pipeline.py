@@ -40,10 +40,16 @@ def load_model():
     return model
 
 
-def find_example(ds, model, target_name=None):
-    """Pick the val image with the highest predicted severity (a real fail),
-    or a specific named image if requested."""
-    best_idx, best_severity = None, -1
+def find_example(ds, model, target_name=None, verdict="fail"):
+    """Pick a val image matching the requested verdict.
+
+    verdict='fail': highest predicted severity, a clear, dramatic real fail.
+    verdict='pass': a real void-containing image that still scores a clean
+    pass, so it's a genuine contrast case, not just an empty image with
+    nothing to show, that would prove nothing about the tool.
+    verdict='any': first image found.
+    """
+    best_idx, best_score = None, None
     with torch.no_grad():
         for i in range(len(ds)):
             img, _, um_per_px, name = ds[i]
@@ -51,10 +57,21 @@ def find_example(ds, model, target_name=None):
                 continue
             pred = model(img.unsqueeze(0).to(DEVICE)).argmax(dim=1).cpu().squeeze(0).numpy()
             sev, _ = severity_straight_line(pred, um_per_px)
+            has_void = (pred == VOID).any()
             if target_name:
                 return i
-            if sev > best_severity:
-                best_severity, best_idx = sev, i
+
+            if verdict == "fail":
+                if sev > (best_score or -1):
+                    best_score, best_idx = sev, i
+            elif verdict == "pass":
+                # among void-containing images that still pass, prefer the
+                # one with the highest (but still passing) severity, the
+                # closest real contrast to the fail example
+                if has_void and sev < STRAIGHT_LINE_THRESHOLD and sev > (best_score or -1):
+                    best_score, best_idx = sev, i
+            else:
+                return i
     return best_idx
 
 
@@ -149,7 +166,11 @@ def draw_pipeline(ds, idx, model, out_path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default=None, help="specific image filename, else auto-picks the worst-case example")
+    ap.add_argument("--image", default=None, help="specific image filename, overrides --verdict")
+    ap.add_argument("--verdict", choices=["fail", "pass", "both"], default="both",
+                     help="'fail' = dramatic worst case, 'pass' = a real void-containing "
+                          "image that still clears the threshold, 'both' = generate one "
+                          "of each (default, shows the tool isn't a fail-everything hammer)")
     args = ap.parse_args()
 
     model = load_model()
@@ -157,11 +178,20 @@ def main():
     _, val_samples = train_val_split(samples)
     ds = VoidSegDataset(val_samples)
 
-    idx = find_example(ds, model, target_name=args.image)
-    if idx is None:
-        raise SystemExit("No matching image found in the validation set.")
+    if args.image:
+        idx = find_example(ds, model, target_name=args.image)
+        if idx is None:
+            raise SystemExit("No matching image found in the validation set.")
+        draw_pipeline(ds, idx, model, "output/figures/pipeline_demo.png")
+        return
 
-    draw_pipeline(ds, idx, model, "output/figures/pipeline_demo.png")
+    verdicts = ["fail", "pass"] if args.verdict == "both" else [args.verdict]
+    for v in verdicts:
+        idx = find_example(ds, model, verdict=v)
+        if idx is None:
+            print(f"No '{v}' example found in the validation set, skipping.")
+            continue
+        draw_pipeline(ds, idx, model, f"output/figures/pipeline_demo_{v}.png")
 
 
 if __name__ == "__main__":
