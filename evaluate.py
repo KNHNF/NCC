@@ -108,21 +108,32 @@ def main():
     print(f"F2 (evaluation.py, additive, threshold {STRAIGHT_LINE_THRESHOLD}): {f2:.4f}")
     print(f"Final score: {final_score:.4f}")
 
-    # confusion matrix figure
+    # confusion matrix figure, cell contents named and explained, not just numbers
     cm = np.array([[tn, fp], [fn, tp]])
-    fig, ax = plt.subplots(figsize=(5, 4))
+    cell_info = [
+        [("True Negative (TN)", "Correctly passed, good part accepted"),
+         ("False Positive (FP)", "False alarm, good part flagged as failed")],
+        [("False Negative (FN)", "Missed defect, bad part passed as good"),
+         ("True Positive (TP)", "Defect correctly caught")],
+    ]
+
+    fig, ax = plt.subplots(figsize=(7.5, 6))
     im = ax.imshow(cm, cmap="Blues")
-    ax.set_xticks([0, 1]); ax.set_xticklabels(["Pass", "Fail"])
-    ax.set_yticks([0, 1]); ax.set_yticklabels(["Pass", "Fail"])
-    ax.set_xlabel("Predicted"); ax.set_ylabel("Ground truth")
-    ax.set_title(f"Confusion matrix, validation set\n(evaluation.py formula, threshold {STRAIGHT_LINE_THRESHOLD})")
+    ax.set_xticks([0, 1]); ax.set_xticklabels(["Predicted: Pass", "Predicted: Fail"], fontsize=11)
+    ax.set_yticks([0, 1]); ax.set_yticklabels(["Actual: Pass", "Actual: Fail"], fontsize=11)
+    ax.set_title(f"Validation confusion matrix, {len(val_samples)} images\n"
+                 f"(evaluation.py formula, threshold {STRAIGHT_LINE_THRESHOLD})", fontsize=12)
+
     for r in range(2):
         for c in range(2):
-            ax.text(c, r, str(cm[r, c]), ha="center", va="center",
-                     color="white" if cm[r, c] > cm.max() / 2 else "black")
-    plt.colorbar(im)
+            name, meaning = cell_info[r][c]
+            colour = "white" if cm[r, c] > cm.max() / 2 else "black"
+            ax.text(c, r, f"{name}\n{cm[r, c]}\n{meaning}", ha="center", va="center",
+                     color=colour, fontsize=9.5, linespacing=1.6)
+
+    plt.colorbar(im, label="count")
     plt.tight_layout()
-    plt.savefig("output/figures/confusion_matrix.png", bbox_inches="tight")
+    plt.savefig("output/figures/confusion_matrix.png", bbox_inches="tight", dpi=150)
     print("\nSaved output/figures/confusion_matrix.png")
 
     import pandas as pd
