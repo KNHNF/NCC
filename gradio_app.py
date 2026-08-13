@@ -84,29 +84,73 @@ def predict(image, um_per_px):
         ax.axis("off")
     plt.tight_layout()
 
-    summary = (f"**Verdict: {verdict}**\n\n"
-               f"Severity: {sev:.1f} (threshold {STRAIGHT_LINE_THRESHOLD})\n\n"
-               f"Void regions found: {len(regions)}\n\n"
-               f"Group severities: {[round(g, 1) for g in group_severities]}")
-
+    badge_bg = "#fdecea" if fail else "#e8f5e9"
+    groups_str = ", ".join(f"{g:.1f}" for g in group_severities) if group_severities else "none"
+    summary = f"""
+<div style="border-radius:12px;border:1px solid #e0e0e0;padding:20px;background:{badge_bg};">
+  <div style="font-size:34px;font-weight:800;color:{colour};letter-spacing:1px;">{verdict}</div>
+  <div style="height:1px;background:#00000014;margin:12px 0;"></div>
+  <table style="width:100%;font-size:15px;color:#2b2b2b;border-collapse:collapse;">
+    <tr><td style="padding:4px 0;color:#666;">Severity score</td>
+        <td style="padding:4px 0;text-align:right;font-weight:600;">{sev:.1f}</td></tr>
+    <tr><td style="padding:4px 0;color:#666;">NCC's fail threshold</td>
+        <td style="padding:4px 0;text-align:right;font-weight:600;">{STRAIGHT_LINE_THRESHOLD}</td></tr>
+    <tr><td style="padding:4px 0;color:#666;">Void regions found</td>
+        <td style="padding:4px 0;text-align:right;font-weight:600;">{len(regions)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666;">Group severities</td>
+        <td style="padding:4px 0;text-align:right;font-weight:600;">{groups_str}</td></tr>
+  </table>
+</div>
+"""
     return fig, summary
 
 
-demo = gr.Interface(
-    fn=predict,
-    inputs=[
-        gr.Image(label="Upload a CFRP micrograph"),
-        gr.Number(value=DEFAULT_UM_PER_PX, label="Microns per pixel (scale)",
-                   info="Real submissions carry this in metadata.csv, set manually for an arbitrary upload"),
-    ],
-    outputs=[
-        gr.Plot(label="Pipeline result"),
-        gr.Markdown(label="Summary"),
-    ],
-    title="NCC composites defect detection, Team Nexus",
-    description="Upload a micrograph, the model segments it, measures any voids, "
-                "and gives a pass/fail call against NCC's own severity threshold.",
+THEME = gr.themes.Soft(
+    primary_hue="blue",
+    secondary_hue="sky",
+    neutral_hue="slate",
+    font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif"],
+).set(
+    body_background_fill="#f7f9fc",
+    body_background_fill_dark="#f7f9fc",
+    block_background_fill="#ffffff",
+    block_border_width="1px",
+    block_shadow="0 2px 10px rgba(20,40,80,0.06)",
+    block_radius="14px",
+    button_primary_background_fill="#2563eb",
+    button_primary_background_fill_hover="#1d4ed8",
+    button_primary_text_color="#ffffff",
 )
+
+CSS = """
+#header {text-align: center; padding: 8px 0 4px 0;}
+#header h1 {font-size: 26px; font-weight: 800; margin-bottom: 2px; color: #0f172a;}
+#header p {color: #475569; font-size: 15px;}
+footer {visibility: hidden}
+"""
+
+with gr.Blocks(theme=THEME, css=CSS, title="NCC Composites Defect Detection") as demo:
+    gr.HTML("""
+    <div id="header">
+      <h1>NCC Composites Defect Detection</h1>
+      <p>Team Nexus &middot; upload a CFRP micrograph, the model segments it, measures every void,
+      and calls pass or fail against NCC's own certification threshold.</p>
+    </div>
+    """)
+
+    with gr.Row():
+        with gr.Column(scale=1):
+            image_in = gr.Image(label="CFRP micrograph", height=300)
+            scale_in = gr.Number(
+                value=DEFAULT_UM_PER_PX, label="Microns per pixel (scale)",
+                info="Real submissions carry this in metadata.csv, set manually for an arbitrary upload")
+            run_btn = gr.Button("Analyse", variant="primary", size="lg")
+        with gr.Column(scale=2):
+            plot_out = gr.Plot(label="Segmentation and measurement")
+            summary_out = gr.HTML(label="Decision")
+
+    run_btn.click(fn=predict, inputs=[image_in, scale_in], outputs=[plot_out, summary_out])
+    image_in.change(fn=predict, inputs=[image_in, scale_in], outputs=[plot_out, summary_out])
 
 if __name__ == "__main__":
     demo.launch(share=True)
