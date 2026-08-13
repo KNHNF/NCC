@@ -86,10 +86,47 @@ def predict(image, um_per_px):
 
     badge_bg = "#fdecea" if fail else "#e8f5e9"
     groups_str = ", ".join(f"{g:.1f}" for g in group_severities) if group_severities else "none"
+
+    margin = sev - STRAIGHT_LINE_THRESHOLD
+    if not regions:
+        plain = "No voids detected, so this part passes by default."
+    elif fail:
+        plain = (f"REJECTED. The worst defect group scored {sev:.1f}, "
+                 f"which is {margin:.1f} points OVER the fail threshold of {STRAIGHT_LINE_THRESHOLD}.")
+    else:
+        plain = (f"ACCEPTED. The worst defect group scored {sev:.1f}, "
+                 f"which is {abs(margin):.1f} points UNDER the fail threshold of {STRAIGHT_LINE_THRESHOLD}.")
+
+    # severity bar: threshold fixed at 60% of the bar width, severity position
+    # scaled relative to it so both a comfortable pass and a severe fail stay
+    # visible without the bar needing to rescale per image
+    bar_max = max(STRAIGHT_LINE_THRESHOLD * 1.8, sev * 1.1, 1)
+    threshold_pct = min(100, STRAIGHT_LINE_THRESHOLD / bar_max * 100)
+    severity_pct = min(100, sev / bar_max * 100)
+
     summary = f"""
 <div style="border-radius:12px;border:1px solid #e0e0e0;padding:20px;background:{badge_bg};">
-  <div style="font-size:34px;font-weight:800;color:{colour};letter-spacing:1px;">{verdict}</div>
-  <div style="height:1px;background:#00000014;margin:12px 0;"></div>
+  <div style="font-size:15px;font-weight:700;letter-spacing:.5px;color:{colour};text-transform:uppercase;">
+      {"REJECTED" if fail else "ACCEPTED"}
+  </div>
+  <div style="font-size:34px;font-weight:800;color:{colour};letter-spacing:1px;margin-top:2px;">{verdict}</div>
+  <div style="font-size:14.5px;color:#334155;margin-top:8px;line-height:1.5;">{plain}</div>
+
+  <div style="margin-top:16px;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px;">
+      <span>0</span><span>Fail threshold ({STRAIGHT_LINE_THRESHOLD})</span><span>{bar_max:.0f}+</span>
+    </div>
+    <div style="position:relative;height:14px;background:#e2e8f0;border-radius:7px;overflow:visible;">
+      <div style="position:absolute;left:0;top:0;height:14px;width:{severity_pct}%;
+                  background:{colour};border-radius:7px;"></div>
+      <div style="position:absolute;left:{threshold_pct}%;top:-3px;height:20px;width:2px;background:#0f172a;"></div>
+    </div>
+    <div style="font-size:11.5px;color:#94a3b8;margin-top:3px;">
+      solid bar = this part's severity &nbsp;&middot;&nbsp; black line = the pass/fail cutoff
+    </div>
+  </div>
+
+  <div style="height:1px;background:#00000014;margin:16px 0;"></div>
   <table style="width:100%;font-size:15px;color:#2b2b2b;border-collapse:collapse;">
     <tr><td style="padding:4px 0;color:#666;">Severity score</td>
         <td style="padding:4px 0;text-align:right;font-weight:600;">{sev:.1f}</td></tr>
@@ -135,6 +172,18 @@ with gr.Blocks(theme=THEME, css=CSS, title="NCC Composites Defect Detection") as
       <h1>NCC Composites Defect Detection</h1>
       <p>Team Nexus &middot; upload a CFRP micrograph, the model segments it, measures every void,
       and calls pass or fail against NCC's own certification threshold.</p>
+    </div>
+    """)
+
+    gr.HTML(f"""
+    <div style="border-radius:12px;border:1px solid #dbeafe;background:#eff6ff;
+                padding:14px 18px;margin-bottom:4px;font-size:13.5px;color:#1e3a5f;line-height:1.6;">
+      <b>How the accept / reject call is made</b><br>
+      Every void the model finds is measured for length and area. Voids within 40 microns of each
+      other are treated as one connected defect, since a crack can propagate through the gap between them.
+      Each group's severity is scored as <b>length + 0.5 &times; &radic;area</b> (microns).
+      <b>Fail (rejected)</b> if the worst group scores <b>{STRAIGHT_LINE_THRESHOLD} or higher</b>.
+      <b>Pass (accepted)</b> if every group scores below {STRAIGHT_LINE_THRESHOLD}, or no voids are found at all.
     </div>
     """)
 
