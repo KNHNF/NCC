@@ -63,12 +63,36 @@ class VoidSegDataset(Dataset):
         return img_t, mask_t, s["um_per_px"], str(s["image"].name)
 
 
+def _source_stem(image_path):
+    """Group key for leak-free splitting.
+
+    Every augmented file is named <original_stem>_aug_0.<ext>, and the same
+    source micrograph appears again, un-augmented, across Data set I/II/III
+    (250/100/150 shared stems between pairs of sets, 1,550 unique sources
+    behind the 4,000 files). Stripping "_aug_0" and any dataset-set suffix
+    collapses all of these back to one key, so an augmented variant and its
+    original always land on the same side of the split, never opposite sides.
+    """
+    stem = Path(image_path).stem
+    if stem.endswith("_aug_0"):
+        stem = stem[: -len("_aug_0")]
+    return stem
+
+
 def train_val_split(samples, val_fraction=0.15, seed=42):
+    """Split by source stem, not by file, so no source image's original and
+    augmented variants are ever split across train and val (that would leak
+    and inflate validation Dice). See _source_stem for why this matters here.
+    """
+    stems = sorted({_source_stem(s["image"]) for s in samples})
     rng = np.random.default_rng(seed)
-    idx = rng.permutation(len(samples))
-    n_val = int(len(samples) * val_fraction)
-    val_idx, train_idx = idx[:n_val], idx[n_val:]
-    return [samples[i] for i in train_idx], [samples[i] for i in val_idx]
+    idx = rng.permutation(len(stems))
+    n_val = int(len(stems) * val_fraction)
+    val_stems = set(stems[i] for i in idx[:n_val])
+
+    train = [s for s in samples if _source_stem(s["image"]) not in val_stems]
+    val = [s for s in samples if _source_stem(s["image"]) in val_stems]
+    return train, val
 
 
 if __name__ == "__main__":
