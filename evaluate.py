@@ -6,16 +6,18 @@ treated as authoritative per the commit-message and NCC-slide evidence, see
 ../05-Day1-Challenge-Briefs.md), reports Dice/F2/final score, and saves a
 confusion matrix figure.
 
-    python evaluate.py
+    python evaluate.py                                    # random split, best_model.pth
+    python evaluate.py --split scale --model best_model_scale.pth   # V-scale held-out
 """
+
+import argparse
 
 import numpy as np
 import segmentation_models_pytorch as smp
 import torch
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 
-from dataset import VoidSegDataset, collect_samples, train_val_split
+from dataset import VoidSegDataset, collect_samples, scale_holdout_split, train_val_split
 from severity import (
     STRAIGHT_LINE_THRESHOLD,
     GEODESIC_THRESHOLD_UM,
@@ -40,16 +42,28 @@ def f2_score(tp, fp, fn):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", default="best_model.pth", help="checkpoint filename in output/")
+    ap.add_argument("--split", choices=["random", "scale"], default="random",
+                     help="'random' matches best_model.pth. 'scale' matches best_model_scale.pth, "
+                          "do not mix these, a model evaluated on the split it wasn't trained "
+                          "against tells you nothing.")
+    args = ap.parse_args()
+
     print(f"Device: {DEVICE}")
 
     model = smp.Unet(encoder_name="resnet18", encoder_weights="imagenet",
                       in_channels=1, classes=NUM_CLASSES).to(DEVICE)
-    model.load_state_dict(torch.load("output/best_model.pth", map_location=DEVICE))
+    model.load_state_dict(torch.load(f"output/{args.model}", map_location=DEVICE))
     model.eval()
 
     samples = collect_samples()
-    _, val_samples = train_val_split(samples)
-    print(f"Validation set: {len(val_samples)} images (leak-free split)")
+    if args.split == "scale":
+        _, val_samples = scale_holdout_split(samples)
+        print(f"V-scale held-out set (radii 6,10): {len(val_samples)} images")
+    else:
+        _, val_samples = train_val_split(samples)
+        print(f"Validation set: {len(val_samples)} images (leak-free random split)")
 
     ds = VoidSegDataset(val_samples)
 
@@ -133,12 +147,15 @@ def main():
 
     plt.colorbar(im, label="count")
     plt.tight_layout()
-    plt.savefig("output/figures/confusion_matrix.png", bbox_inches="tight", dpi=150)
-    print("\nSaved output/figures/confusion_matrix.png")
+    suffix = "_scale" if args.split == "scale" else ""
+    cm_path = f"output/figures/confusion_matrix{suffix}.png"
+    csv_path = f"output/validation_scores{suffix}.csv"
+    plt.savefig(cm_path, bbox_inches="tight", dpi=150)
+    print(f"\nSaved {cm_path}")
 
     import pandas as pd
-    pd.DataFrame(rows).to_csv("output/validation_scores.csv", index=False)
-    print("Saved output/validation_scores.csv (both formulas, per-image)")
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print(f"Saved {csv_path} (both formulas, per-image)")
 
     n_agree = sum(1 for r in rows
                   if (r["severity_pred_additive"] >= STRAIGHT_LINE_THRESHOLD)
