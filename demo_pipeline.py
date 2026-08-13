@@ -58,6 +58,21 @@ def find_example(ds, model, target_name=None):
     return best_idx
 
 
+STEP_COLOUR = "#2f5d8a"
+FAIL_COLOUR = "#c0392b"
+PASS_COLOUR = "#2e7d32"
+MATRIX_C, FIBRE_C, VOID_C = "#2b2b2b", "#8fbf8f", "#ff5b4d"
+
+
+def _panel_title(ax, step_num, title, subtitle=""):
+    """A numbered step badge plus a real title, readable from the back of a room."""
+    ax.set_title(f"{title}\n{subtitle}" if subtitle else title,
+                 fontsize=15, fontweight="bold", pad=14, loc="center")
+    ax.text(0.0, 1.14, f"STEP {step_num}", transform=ax.transAxes,
+             fontsize=10.5, fontweight="bold", color="white", ha="left", va="center",
+             bbox=dict(boxstyle="round,pad=0.35", facecolor=STEP_COLOUR, edgecolor="none"))
+
+
 def draw_pipeline(ds, idx, model, out_path):
     img, gt_mask, um_per_px, name = ds[idx]
     with torch.no_grad():
@@ -70,53 +85,63 @@ def draw_pipeline(ds, idx, model, out_path):
     labelled = label(pred == VOID, connectivity=2)
     regions = regionprops(labelled)
 
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5.5))
+    fig, axes = plt.subplots(1, 4, figsize=(26, 7.5))
+    fig.patch.set_facecolor("white")
 
-    # 1. Input
+    # STEP 1: Input
     axes[0].imshow(img.squeeze(0), cmap="gray")
-    axes[0].set_title(f"1. Input\n{name}", fontsize=11)
+    _panel_title(axes[0], 1, "Micrograph uploaded", "raw microscope image, 256 x 256 pixels")
 
-    # 2. Segmentation
-    cmap = plt.matplotlib.colors.ListedColormap(["#2b2b2b", "#7fb37f", "#e8544c"])
+    # STEP 2: Segmentation
+    cmap = plt.matplotlib.colors.ListedColormap([MATRIX_C, FIBRE_C, VOID_C])
     axes[1].imshow(pred, cmap=cmap, vmin=0, vmax=2)
-    axes[1].set_title("2. Segmentation\nmatrix / fibre / void", fontsize=11)
+    _panel_title(axes[1], 2, "AI segmentation", "every pixel classified by the model")
     patches = [mpatches.Patch(color=c, label=l) for c, l in
-               zip(["#2b2b2b", "#7fb37f", "#e8544c"], ["Matrix", "Fibre", "Void"])]
-    axes[1].legend(handles=patches, loc="lower right", fontsize=7, framealpha=0.8)
+               zip([MATRIX_C, FIBRE_C, VOID_C], ["Matrix (resin)", "Fibre", "Void (defect)"])]
+    axes[1].legend(handles=patches, loc="lower right", fontsize=10.5, framealpha=0.95,
+                   edgecolor="black", fancybox=False)
 
-    # 3. Measurement
+    # STEP 3: Measurement
     axes[2].imshow(img.squeeze(0), cmap="gray")
-    axes[2].imshow(np.ma.masked_where(pred != VOID, pred), cmap="autumn", alpha=0.6, vmin=0, vmax=2)
-    for r in regions:
+    axes[2].imshow(np.ma.masked_where(pred != VOID, pred), cmap="autumn", alpha=0.65, vmin=0, vmax=2)
+    for i, r in enumerate(regions, start=1):
         y, x = r.centroid
         length_um = (r.axis_major_length or 1) * um_per_px
         area_um2 = r.area * um_per_px ** 2
-        axes[2].plot(x, y, "o", color="cyan", markersize=3)
-        axes[2].annotate(f"{length_um:.0f}um\n{area_um2:.0f}um2", (x, y),
-                          color="cyan", fontsize=6.5, ha="left", va="bottom")
-    axes[2].set_title(f"3. Measurement\n{len(regions)} void region(s) found", fontsize=11)
+        axes[2].plot(x, y, "o", color="cyan", markersize=6, markeredgecolor="black", markeredgewidth=0.8)
+        axes[2].annotate(f"void {i}\n{length_um:.0f} um long\n{area_um2:.0f} um2",
+                          (x, y), xytext=(8, 8), textcoords="offset points",
+                          color="black", fontsize=9.5, fontweight="bold", ha="left", va="bottom",
+                          bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="cyan"))
+    subtitle = f"{len(regions)} void region(s) found and measured" if regions else "no voids found"
+    _panel_title(axes[2], 3, "Defect measurement", subtitle)
 
-    # 4. Decision
+    # STEP 4: Decision
     axes[3].axis("off")
     verdict = "FAIL" if fail else "PASS"
-    colour = "#e8544c" if fail else "#4f9e4f"
-    reason = (f"Worst group severity {sev:.1f}, threshold {STRAIGHT_LINE_THRESHOLD}.\n"
-              f"{'Exceeds' if fail else 'Within'} NCC's limit."
-              if regions else "No voids detected.")
-    axes[3].text(0.5, 0.75, verdict, fontsize=32, fontweight="bold", color=colour,
+    colour = FAIL_COLOUR if fail else PASS_COLOUR
+    axes[3].add_patch(mpatches.FancyBboxPatch((0.06, 0.55), 0.88, 0.32,
+                       boxstyle="round,pad=0.02", transform=axes[3].transAxes,
+                       facecolor=colour, edgecolor="none", alpha=0.15))
+    reason = (f"Worst defect group scored {sev:.1f}\n"
+              f"NCC's limit is {STRAIGHT_LINE_THRESHOLD}\n"
+              f"{'This exceeds the limit' if fail else 'This is within the limit'}"
+              if regions else "No voids detected, part passes by default.")
+    axes[3].text(0.5, 0.72, verdict, fontsize=44, fontweight="bold", color=colour,
                  ha="center", va="center", transform=axes[3].transAxes)
-    axes[3].text(0.5, 0.45, reason, fontsize=11, ha="center", va="center",
-                 transform=axes[3].transAxes, wrap=True)
-    axes[3].text(0.5, 0.15, f"Scale: {um_per_px} um/pixel", fontsize=9, color="grey",
-                 ha="center", va="center", transform=axes[3].transAxes)
-    axes[3].set_title("4. Decision", fontsize=11)
+    axes[3].text(0.5, 0.42, reason, fontsize=13, ha="center", va="center",
+                 transform=axes[3].transAxes, linespacing=1.8)
+    axes[3].text(0.5, 0.10, f"Image scale: {um_per_px} microns per pixel", fontsize=10,
+                 color="grey", ha="center", va="center", transform=axes[3].transAxes)
+    _panel_title(axes[3], 4, "Certification decision", "pass / fail call, with the reason")
 
     for ax in axes[:3]:
         ax.axis("off")
 
-    plt.suptitle(f"Micrograph to certification decision, verdict: {verdict}", fontsize=13, y=1.02)
+    fig.suptitle(f"From micrograph to certification decision  -  result: {verdict}",
+                 fontsize=19, fontweight="bold", y=1.06, color=colour)
     plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", dpi=150)
+    plt.savefig(out_path, bbox_inches="tight", dpi=150, facecolor="white")
     print(f"Saved {out_path}")
     print(f"Image: {name}  severity: {sev:.2f}  verdict: {verdict}  "
           f"regions: {len(regions)}  group severities: {[f'{g:.1f}' for g in group_severities]}")
