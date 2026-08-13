@@ -9,6 +9,7 @@ Then open the local URL it prints, or share the public link it also prints
 (share=True below) for the pitch if you want it accessible off your laptop.
 """
 
+import random
 import re
 from pathlib import Path
 
@@ -32,9 +33,6 @@ DEFAULT_UM_PER_PX = 1.33  # Data set I's common scale, a reasonable default for 
 MODEL_SIZE = 256
 
 DEMO_DIR = Path(__file__).parent / "demo-images"
-# Real NCC filenames (pixel-matched), scale kept in the name so um_per_px infers correctly.
-PASS_DEMO = DEMO_DIR / "G02_3_5120_7168_aug_0_scale1.0.png"
-FAIL_DEMO = DEMO_DIR / "2_3_2_R_cut_128_14848_scale1.33.png"
 _SCALE_IN_NAME = re.compile(r"scale(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 MATRIX_C, FIBRE_C, VOID_C = "#2b2b2b", "#8fbf8f", "#ff5b4d"
@@ -56,24 +54,65 @@ def get_model():
 def infer_scale_from_path(path):
     if not path:
         return None
-    m = _SCALE_IN_NAME.search(Path(str(path)).name)
+    text = str(path)
+    m = _SCALE_IN_NAME.search(Path(text).name) or _SCALE_IN_NAME.search(text)
     return float(m.group(1)) if m else None
 
 
-def update_scale_from_filename(image_path, current_um):
-    """Prefill microns/pixel when the filename carries it (demo images do)."""
+def list_demo_pngs():
+    if not DEMO_DIR.is_dir():
+        return []
+    return sorted(p for p in DEMO_DIR.glob("*.png") if p.is_file())
+
+
+def infer_scale_from_demo_pixels(image_path):
+    """If Gradio renamed the upload, match pixels against demo-images."""
+    if not image_path:
+        return None
+    try:
+        uploaded = np.array(Image.open(image_path).convert("L"))
+    except OSError:
+        return None
+    for demo_path in list_demo_pngs():
+        try:
+            demo = np.array(Image.open(demo_path).convert("L"))
+        except OSError:
+            continue
+        if demo.shape == uploaded.shape and np.array_equal(demo, uploaded):
+            return infer_scale_from_path(demo_path)
+    return None
+
+
+def infer_scale(image_path):
     inferred = infer_scale_from_path(image_path)
+    if inferred is not None:
+        return inferred
+    return infer_scale_from_demo_pixels(image_path)
+
+
+def update_scale_from_filename(image_path, current_um):
+    """Prefill microns/pixel from the filename, or from a demo-images pixel match."""
+    inferred = infer_scale(image_path)
     return inferred if inferred is not None else current_um
 
 
 def resolve_scale(image_path, um_per_px):
-    """Filename scale wins for named demo files, otherwise the number box."""
-    inferred = infer_scale_from_path(image_path)
+    """Filename (or demo pixel match) wins; otherwise the number box."""
+    inferred = infer_scale(image_path)
     if inferred is not None:
         return inferred
     if um_per_px is not None and float(um_per_px) > 0:
         return float(um_per_px)
     return DEFAULT_UM_PER_PX
+
+
+def pick_random_holdout():
+    pngs = list_demo_pngs()
+    if not pngs:
+        return None, DEFAULT_UM_PER_PX
+    chosen = random.choice(pngs)
+    scale = infer_scale_from_path(chosen) or DEFAULT_UM_PER_PX
+    return str(chosen.resolve()), scale
 
 
 def load_micrograph(image_path, um_per_px):
@@ -212,7 +251,7 @@ THEME = gr.themes.Soft(
     body_background_fill="#f7f9fc",
     body_background_fill_dark="#f7f9fc",
     body_text_color="#0f172a",
-    body_text_color_subdued="#334155",
+    body_text_color_subdued="#0f172a",
     block_background_fill="#ffffff",
     block_label_text_color="#0f172a",
     block_title_text_color="#0f172a",
@@ -228,8 +267,9 @@ THEME = gr.themes.Soft(
 CSS = """
 #header {text-align: center; padding: 8px 0 4px 0;}
 #header h1 {font-size: 26px; font-weight: 800; margin-bottom: 2px; color: #0f172a !important;}
-#header p {color: #334155 !important; font-size: 15px;}
-#device-line {color: #1e3a5f !important; font-size: 13.5px; font-weight: 700; margin-top: 4px;}
+#header p {color: #0f172a !important; font-size: 15px;}
+#device-line {color: #0f172a !important; font-size: 13.5px; font-weight: 700; margin-top: 4px;}
+#rule-box, #rule-box * {color: #0f172a !important;}
 #recording-hint {
   border-radius: 12px; border: 1px solid #c7d2fe; background: #eef2ff;
   padding: 12px 16px; margin: 8px 0 4px 0; font-size: 15px;
@@ -238,7 +278,9 @@ CSS = """
 footer {visibility: hidden}
 
 .gradio-container, .gradio-container label, .gradio-container span,
-.gradio-container p, .gradio-container td, .gradio-container th {
+.gradio-container p, .gradio-container td, .gradio-container th,
+.gradio-container .info, .gradio-container [data-testid="block-info"],
+.gradio-container .block-info, .gradio-container .svelte-1gfkn6j {
   color: #0f172a !important; opacity: 1 !important;
 }
 .gradio-container table th {
@@ -246,10 +288,6 @@ footer {visibility: hidden}
 }
 .gradio-container table td {
   background: #ffffff !important; color: #0f172a !important; font-weight: 600 !important;
-}
-#demo-examples table th, #demo-examples table td,
-#demo-examples span, #demo-examples p {
-  color: #0f172a !important; opacity: 1 !important;
 }
 
 #decision-card, #decision-card * {opacity: 1 !important;}
@@ -270,7 +308,7 @@ footer {visibility: hidden}
   width: 100%; font-size: 15px; border-collapse: collapse; color: #0f172a !important;
 }
 #decision-card td.lbl {
-  padding: 5px 0; color: #334155 !important; font-weight: 600;
+  padding: 5px 0; color: #0f172a !important; font-weight: 600;
 }
 #decision-card td.val {
   padding: 5px 0; text-align: right; color: #0f172a !important;
@@ -292,8 +330,8 @@ with gr.Blocks(title="NCC Composites Defect Detection") as demo:
     """)
 
     gr.HTML(f"""
-    <div style="border-radius:12px;border:1px solid #dbeafe;background:#eff6ff;
-                padding:14px 18px;margin-bottom:4px;font-size:13.5px;color:#1e3a5f;line-height:1.6;">
+    <div id="rule-box" style="border-radius:12px;border:1px solid #dbeafe;background:#eff6ff;
+                padding:14px 18px;margin-bottom:4px;font-size:13.5px;color:#0f172a;line-height:1.6;">
       <b>How the accept / reject call is made</b><br>
       Every void the model finds is measured for length and area. Voids within 40 microns of each
       other are treated as one connected defect, since a crack can propagate through the gap between them.
@@ -308,34 +346,26 @@ with gr.Blocks(title="NCC Composites Defect Detection") as demo:
 
     gr.HTML("""
     <div id="recording-hint">
-      Click a micrograph, then Analyse. Inference runs live on this laptop (CPU), not from a saved screenshot.
+      Upload from demo-images, pick any file (or use Pick a random hold-out), then Analyse.
+      Inference runs live on this laptop (CPU), not from a saved screenshot.
     </div>
     """)
 
     with gr.Row():
         with gr.Column(scale=1):
             image_in = gr.Image(
-                label="CFRP micrograph", type="filepath", height=300, sources=["upload"])
+                label="CFRP micrograph", type="filepath", height=300,
+                sources=["upload"], format="png")
             scale_in = gr.Number(
-                value=DEFAULT_UM_PER_PX, label="Microns per pixel (scale)",
-                info="Must match the micrograph. If the filename contains scale1.0 or scale1.33, that value is used automatically.")
+                value=DEFAULT_UM_PER_PX, label="Microns per pixel (optional)",
+                info="Taken from the filename when it contains scale1.0 or scale1.33. Only needed if the name has no scale.")
+            random_btn = gr.Button("Pick a random hold-out", variant="secondary")
             run_btn = gr.Button("Analyse", variant="primary", size="lg")
-            demo_examples = []
-            if PASS_DEMO.exists():
-                demo_examples.append(["demo-images/" + PASS_DEMO.name, 1.0])
-            if FAIL_DEMO.exists():
-                demo_examples.append(["demo-images/" + FAIL_DEMO.name, 1.33])
-            if demo_examples:
-                gr.Examples(
-                    examples=demo_examples,
-                    inputs=[image_in, scale_in],
-                    label="NCC micrographs (held out of training)",
-                    elem_id="demo-examples",
-                )
         with gr.Column(scale=2):
             plot_out = gr.Plot(label="Segmentation and measurement")
             summary_out = gr.HTML(label="Decision", elem_id="decision-html")
 
+    random_btn.click(fn=pick_random_holdout, outputs=[image_in, scale_in])
     run_btn.click(fn=predict, inputs=[image_in, scale_in], outputs=[plot_out, summary_out])
     image_in.change(fn=update_scale_from_filename, inputs=[image_in, scale_in], outputs=[scale_in])
 

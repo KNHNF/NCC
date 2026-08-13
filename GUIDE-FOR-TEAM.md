@@ -31,9 +31,9 @@ Use `../Pitch-Materials/Nexus-team-pack/` (WhatsApp zip target), not this repo a
 
 ## If you want to run the live demo
 
-`python gradio_app.py` from inside `karan-ncc-analysis`, then open http://127.0.0.1:7860. Click a micrograph, then Analyse.
+`python gradio_app.py` from inside `karan-ncc-analysis`, then open http://127.0.0.1:7860. Upload from `demo-images` (or Pick a random hold-out), then Analyse.
 
-Read [DEMO-FOR-TEAM.md](DEMO-FOR-TEAM.md) before anyone records: what FAIL/PASS mean, CPU vs GPU (this laptop is CPU-only), and the two hold-out images. Recording click order and spoken lines: [DEMO-RECORDING-PLAN.md](DEMO-RECORDING-PLAN.md).
+Read [DEMO-FOR-TEAM.md](DEMO-FOR-TEAM.md) before anyone records: what FAIL/PASS mean, CPU vs GPU (this laptop is CPU-only), and the hold-out folder. Recording click order and spoken lines: [DEMO-RECORDING-PLAN.md](DEMO-RECORDING-PLAN.md).
 
 ## What's still open
 

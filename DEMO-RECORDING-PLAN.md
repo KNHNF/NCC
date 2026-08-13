@@ -2,9 +2,11 @@
 
 Live Gradio demo for Team Nexus, NCCUK composites challenge. Local URL: http://127.0.0.1:7860 (or 7861 if 7860 is already taken).
 
+Record in **Microsoft Edge fullscreen** (F11) on this laptop. No public Gradio link is needed.
+
 Hard refresh the tab before you start. Do not use an old tab.
 
-This file also lives in the hackathon Pitch-Materials folder. This copy is the one teammates get when they clone `github.com/KNHNF/NCC`.
+`demo-images/` is a small hold-out tray (gitignored, laptop only). Real NCC ids plus `_scale1.0` / `_scale1.33`. All stems are validation hold-out (seed 42), not the hidden 32-image test set. Pick any file; do not present them as two staged rows.
 
 ## What you must say if asked
 
@@ -12,31 +14,31 @@ This file also lives in the hackathon Pitch-Materials folder. This copy is the o
 
 **CPU, not GPU, on this laptop.** "Training was on GPU, Kaggle or Colab. This laptop demo uses PyTorch 2.13 CPU-only, CUDA is not available here, so inference is on CPU. That is fine for a 256 by 256 micrograph. Say running live on CPU. Never imply a GPU is in use on this laptop."
 
-**These two images were held out of training.** Both source stems landed in the leak-free validation split (seed 42, grouped by source image). Safe to say: "these two micrographs were held out of training." Do not call them the hidden test set. They are from NCC's labelled set, validation hold-out.
+**Hold-out micrographs.** Safe to say: "These are hold-out micrographs, different magnifications so microns per pixel is 1.0 or 1.33 depending on the photo, that comes from NCC's own metadata. I'll pick one at random." Do not call them the hidden test set. Do not mention a scale table or Examples row.
 
-## Click order (about 45-60 seconds)
+## Click order (Edge fullscreen, about 45-60 seconds)
 
-1. Show the header: how pass/fail is decided, threshold 25.
-2. Click the first thumbnail: `G02_3_5120_7168_aug_0_scale1.0.png`. Scale should read 1.00.
-3. One line: "Real NCC micrograph, held out of training. Live inference on CPU now."
-4. Click **Analyse**. Wait. Expect **PASS**, severity about **24.2**, 0.8 under the limit of 25.
-5. "PASS means this part would be accepted. It meets NCC's certification rule."
-6. Click the second thumbnail: `2_3_2_R_cut_128_14848_scale1.33.png`. Scale should read 1.33.
-7. Click **Analyse**. Wait. Expect **FAIL**, severity about **388**.
-8. "FAIL means this part would be rejected. It does not meet the certification rule."
+1. Open Edge, go to http://127.0.0.1:7860, press F11.
+2. Show the header: how pass/fail is decided, FAIL means rejected at 25 or higher, PASS means accepted below 25, device line says CPU.
+3. Spoken: "These are hold-out micrographs, different magnifications so microns per pixel is 1.0 or 1.33 depending on the photo, that comes from NCC's own metadata. I'll pick one at random."
+4. Either click **Pick a random hold-out**, or click upload, browse to `karan-ncc-analysis\demo-images`, pick any PNG.
+5. Click **Analyse**. Wait. Do not say PASS or FAIL before the live result lands.
+6. If PASS: "PASS means this part would be accepted. It meets NCC's certification rule."
+7. If FAIL: "FAIL means this part would be rejected. It does not meet the certification rule."
+8. Optional: pick another at random, Analyse again, so camera sees both an accept and a reject.
 
-Do not say PASS or FAIL before Analyse finishes. Let the live result land on camera.
+Do not say PASS or FAIL before Analyse finishes.
 
 ## If something looks wrong
 
-- Scale still on 1.33 for the first image: click Analyse anyway, the filename scale wins. Or click the thumbnail again.
+- Scale box still on 1.33 after a `scale1.0` file: click Analyse anyway, the filename scale wins. Or click Pick a random hold-out again.
 - Left preview blank: ignore it, the three-panel plot is the picture that matters.
-- Both fail, or first image ~32: stop, that is the old wrong-scale bug. Refresh, use the named thumbnails, not a random TIFF.
+- Both fail, or a known near-pass scores ~32: stop, that is the old wrong-scale bug. Refresh, upload from `demo-images` or use Pick a random hold-out. Do not upload a random TIFF.
 
 ## One-liners (memorise these)
 
 - Live: "U-Net plus severity, running live on click, not a saved screenshot."
 - Device: "Trained on GPU. This demo is live on CPU."
-- Origin: "Two real NCC labelled micrographs, held out of training."
-- PASS: "24.2, under 25, accepted."
-- FAIL: "388, over 25, rejected."
+- Origin: "Hold-out NCC micrographs, held out of training."
+- PASS: "Under 25, accepted."
+- FAIL: "25 or over, rejected."

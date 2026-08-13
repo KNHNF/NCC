@@ -11,9 +11,9 @@ From `karan-ncc-analysis`:
 python gradio_app.py
 ```
 
-Open http://127.0.0.1:7860 (hard refresh if the tab was already open).
+Open http://127.0.0.1:7860 (hard refresh if the tab was already open). Record in Microsoft Edge fullscreen (F11). No public Gradio link is needed.
 
-Click a micrograph, then **Analyse**. Do not rely on upload-auto-run, it is off on purpose.
+Upload from `demo-images`, pick any PNG, then **Analyse**. Or click **Pick a random hold-out**, then Analyse. Do not rely on upload-auto-run, it is off on purpose. There is no thumbnail table on screen before you submit.
 
 ## What it does on click (live inference)
 
@@ -35,22 +35,15 @@ A 256 x 256 image is small enough that CPU inference is fine (a couple of second
 
 The header line on the app states the device.
 
-## The two recording images
+## The hold-out folder
 
-Matched by grayscale pixel hash to NCC's labelled set, then checked against `dataset.train_val_split` (seed 42, leak-free by source stem).
+`demo-images/` is a small specimen tray of real NCC labelled micrographs. All stems are in the leak-free validation hold-out (`dataset.train_val_split`, seed 42). None of them were in training. Filenames are the real NCC ids plus `_scale1.0` or `_scale1.33` so microns per pixel can be read from the name (NCC metadata: Data set I is often 1.33, some Data set III images are 1.0).
 
-| On camera | Demo file (PNG, for browser preview) | Original NCC file | Where | um/px | Split |
-|---|---|---|---|---|---|
-| First click | `demo-images/G02_3_5120_7168_aug_0_scale1.0.png` | `G02_3_5120_7168_aug_0.tif` | Data set III / Augmented / Images | 1.0 | **VAL** |
-| Second click | `demo-images/2_3_2_R_cut_128_14848_scale1.33.png` | `2_3_2_R_cut_128_14848.tif` | Data set I / Original / Images | 1.33 | **VAL** |
+**Safe to say:** "these are hold-out micrographs, held out of training. Different magnifications, so microns per pixel is 1.0 or 1.33 depending on the photo, that comes from NCC's own metadata. I'll pick one at random."
 
-Source stems: `G02_3_5120_7168` and `2_3_2_R_cut_128_14848`. Both stems are in the validation hold-out, so neither the original nor the `_aug_0` variant was in training.
+**Not safe to say:** "hidden test set" (that is the separate 32-image test folder). Do not say they were cherry-picked under fake names. Do not mention a scale table or Examples row; that UI is gone.
 
-**Safe to say:** "these two micrographs were held out of training."
-
-**Not safe to say:** "hidden test set" (that is the separate 32-image test folder). Do not say they were cherry-picked under fake names. The filenames are the real NCC ids, with `scale1.0` / `scale1.33` added so the app can read microns per pixel.
-
-Expected live scores: first image about **24.2 PASS**, second about **388 FAIL**.
+Expected live scores if those two come up: `G02_3_5120_7168_aug_0_scale1.0.png` about **24.2 PASS**, `2_3_2_R_cut_128_14848_scale1.33.png` about **388 FAIL**. Other files in the folder also mix clear PASS (under 25, with visible voids) and clear FAIL (well over 25), plus one near the threshold.
 
 ## What FAIL and PASS mean
 
@@ -59,8 +52,8 @@ Expected live scores: first image about **24.2 PASS**, second about **388 FAIL**
 
 ## Recording click order
 
-See [DEMO-RECORDING-PLAN.md](DEMO-RECORDING-PLAN.md). Short version: first thumbnail, Analyse, talk through PASS; second thumbnail, Analyse, talk through FAIL.
+See [DEMO-RECORDING-PLAN.md](DEMO-RECORDING-PLAN.md). Short version: Edge fullscreen, upload from `demo-images` (or Pick a random hold-out), Analyse, talk through PASS or FAIL.
 
 ## If both images fail
 
-Wrong scale. Severity scales linearly with microns per pixel. The first image at 1.0 scores 24.2 (pass). At the old default 1.33 it scores 32.2 (fail). Use the named thumbnails, or keep `scale1.0` / `scale1.33` in the filename.
+Wrong scale. Severity scales linearly with microns per pixel. A 1.0 image at 1.0 scores 24.2 (pass). At the old default 1.33 it scores 32.2 (fail). Keep `scale1.0` / `scale1.33` in the filename, or use Pick a random hold-out (it fills scale too). Filename scale still wins over the number box.
