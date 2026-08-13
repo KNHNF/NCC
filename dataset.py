@@ -39,6 +39,7 @@ def collect_samples():
                         "image": img_path,
                         "mask": mask_path,
                         "um_per_px": float(row["um_per_pixel"]),
+                        "fibre_radius_px": int(row["fibre_radius_px"]),
                     })
     return samples
 
@@ -93,6 +94,30 @@ def train_val_split(samples, val_fraction=0.15, seed=42):
     train = [s for s in samples if _source_stem(s["image"]) not in val_stems]
     val = [s for s in samples if _source_stem(s["image"]) in val_stems]
     return train, val
+
+
+SCALE_HOLDOUT_RADII = {6, 10}
+
+
+def scale_holdout_split(samples):
+    """V-scale: hold out fibre radii 6 and 10 entirely from training.
+
+    The real test set is entirely at fibre radius 7, which barely exists in
+    training (28 files, all crop-zoom augmentation artefacts, not independent
+    sources). A random split can't measure how the model handles a scale it
+    has never really seen. This split does: radii 6 and 10 never appear in
+    training, so scoring on them is the closest honest proxy for radius 7
+    performance available from this dataset. Where this split and the random
+    one disagree, believe this one, per NCC's own dataset having a deliberate
+    scale gap at the test radius.
+
+    Unlike train_val_split, a model must be RE-TRAINED with radii 6/10 fully
+    excluded for this to mean anything, evaluating an existing model that was
+    trained on data including radius 6/10 images is not a real test.
+    """
+    train = [s for s in samples if s["fibre_radius_px"] not in SCALE_HOLDOUT_RADII]
+    heldout = [s for s in samples if s["fibre_radius_px"] in SCALE_HOLDOUT_RADII]
+    return train, heldout
 
 
 if __name__ == "__main__":

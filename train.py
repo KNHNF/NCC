@@ -2,6 +2,12 @@
 
     python train.py --epochs 20 --batch-size 16 --subset 0   # full run
     python train.py --epochs 1 --subset 200                  # smoke test
+    python train.py --epochs 20 --split scale                # V-scale: excludes
+                                                               # fibre radii 6/10
+                                                               # from training,
+                                                               # tests generalisation
+                                                               # to the real test
+                                                               # set's radius-7 scale
 
 Saves the best-Dice checkpoint to best_model.pth. Does not touch evaluation.py
 or score_submission.py, those are the locked scorers, this script is the only
@@ -15,7 +21,7 @@ import segmentation_models_pytorch as smp
 import torch
 from torch.utils.data import DataLoader
 
-from dataset import VoidSegDataset, collect_samples, train_val_split
+from dataset import VoidSegDataset, collect_samples, scale_holdout_split, train_val_split
 
 VOID_CLASS = 2
 NUM_CLASSES = 3
@@ -48,6 +54,11 @@ def main():
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--subset", type=int, default=0, help="0 = full dataset, N = first N samples (smoke test)")
+    ap.add_argument("--split", choices=["random", "scale"], default="random",
+                     help="'random' = leak-free random split (day-to-day iteration). "
+                          "'scale' = V-scale, excludes fibre radii 6/10 from training "
+                          "entirely, the honest proxy for the test set's radius-7 scale. "
+                          "Use 'scale' before trusting any number as the final one.")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
@@ -56,8 +67,14 @@ def main():
     samples = collect_samples()
     if args.subset:
         samples = samples[: args.subset]
-    train_samples, val_samples = train_val_split(samples)
-    print(f"Train: {len(train_samples)}  Val: {len(val_samples)}")
+
+    if args.split == "scale":
+        train_samples, val_samples = scale_holdout_split(samples)
+        print(f"V-scale split: Train (excl. radii 6,10): {len(train_samples)}  "
+              f"Held-out (radii 6,10): {len(val_samples)}")
+    else:
+        train_samples, val_samples = train_val_split(samples)
+        print(f"Random split: Train: {len(train_samples)}  Val: {len(val_samples)}")
 
     train_loader = DataLoader(VoidSegDataset(train_samples), batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(VoidSegDataset(val_samples), batch_size=args.batch_size, shuffle=False)
@@ -102,10 +119,12 @@ def main():
 
         if mean_dice > best_dice:
             best_dice = mean_dice
-            torch.save(model.state_dict(), "best_model.pth")
-            print(f"  saved best_model.pth (Dice {best_dice:.4f})")
+            out_name = "best_model_scale.pth" if args.split == "scale" else "best_model.pth"
+            torch.save(model.state_dict(), out_name)
+            print(f"  saved {out_name} (Dice {best_dice:.4f})")
 
-    print(f"\nBest val Dice_void: {best_dice:.4f}  (gate is 0.8)")
+    label = "V-scale held-out (radii 6,10)" if args.split == "scale" else "val"
+    print(f"\nBest {label} Dice_void: {best_dice:.4f}  (gate is 0.8)")
 
 
 if __name__ == "__main__":
