@@ -18,3 +18,8 @@ GEMINI_API_KEY*
 .DS_Store
 Thumbs.db
 best_model.pth
+
+# kaggle run outputs, large checkpoints and archives, keep local only
+*.pth
+*.zip
+output/new output/
