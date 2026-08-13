@@ -1,0 +1,19 @@
+# data lives in the sibling ncc-challenge/ clone, not duplicated here
+data/
+*.npy
+*.pth
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# secrets
+.env
+*.env
+GEMINI_API_KEY*
+
+# os
+.DS_Store
+Thumbs.db
