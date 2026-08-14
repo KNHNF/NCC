@@ -18,6 +18,15 @@ Carbon fibre reinforced polymer (CFRP) parts are inspected via cross-section mic
 
 Scored against NCC's authoritative formula (`evaluation.py`, additive, threshold 25).
 
+### Data used, plainly
+
+4,000 labelled files supplied (1,550 unique source images, the rest are augmented copies of those same 1,550). Two separate train/test splits were run:
+
+- **Random split**: trained on 3,384 images, tested on 616 held-out images the model never saw during training.
+- **V-scale split**: trained on 3,286 images (fibre sizes 6 and 10 completely excluded), tested on 714 held-out images at those excluded sizes, to check the model works on a scale it never trained on at all.
+
+Both splits are grouped by source image, not by file, so no image's augmented copy ever ends up on the training side while the original is on the test side, or vice versa.
+
 ### Random split (616 held-out images, standard test)
 
 | Metric | Value |
