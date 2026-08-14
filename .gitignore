@@ -2,6 +2,9 @@
 data/
 *.npy
 *.pth
+# exception: the checkpoint used for the reported results, kept in the repo
+# so evaluate.py is runnable without retraining first (~57MB, within GitHub's limit)
+!output/best_model.pth
 
 # python
 __pycache__/
@@ -17,10 +20,10 @@ GEMINI_API_KEY*
 # os
 .DS_Store
 Thumbs.db
-best_model.pth
 
 # kaggle run outputs, large checkpoints and archives, keep local only
-*.pth
+# (output/best_model.pth is the one exception, whitelisted above)
+best_model_scale.pth
 *.zip
 output/new output/
 output/__huggingface_repos__.json

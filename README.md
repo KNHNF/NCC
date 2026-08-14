@@ -74,6 +74,30 @@ pip install numpy scipy pandas pillow scikit-image torch segmentation-models-pyt
 
 Requires the challenge repo and NCC's Drive files cloned as siblings to this folder (`../ncc-challenge` and `../ncc-official-drive`), since `test_severity.py` imports NCC's real scripts directly rather than reimplementing them, and `dataset.py` reads training data from `../ncc-challenge/data`.
 
+## Reproduction, exact commands
+
+Everything needed to independently verify the reported numbers, including the trained checkpoint (`output/best_model.pth`, kept in the repo, not gitignored, so this runs without retraining first).
+
+```bash
+git clone https://github.com/KNHNF/NCC.git
+cd NCC
+git clone https://github.com/KAngelov-NCC/ai_hackathon_uwe_student.git ../ncc-challenge
+python -m venv .venv
+.venv\Scripts\activate
+pip install numpy scipy pandas pillow scikit-image torch segmentation-models-pytorch matplotlib scikit-learn gradio
+
+# verify the scoring code matches NCC's real scripts on a synthetic case
+python test_severity.py
+
+# reproduce the headline numbers: Dice 0.78, F2 0.93, final score 0.90
+python evaluate.py
+
+# run the live demo yourself
+python gradio_app.py
+```
+
+`../ncc-challenge` needs to be the actual NCC challenge repo cloned as a sibling folder, it supplies the training/validation data `evaluate.py` and `test_severity.py` read from.
+
 ## Structure
 
 - `severity.py` - both severity formulas, verified against NCC's real scripts. The part that matters most, everything downstream depends on this being correct.
