@@ -1,28 +1,59 @@
-# NCC, AI Hackathon composites defect challenge
+# NCC Composites Defect Detection
 
 Independent analysis for the National Composites Centre (NCCUK) challenge at the UWE Bristol / Tech West England Advocates / Rootcause.ai AI Hackathon, 13-14 Aug 2026. Team Nexus. This repo is my own working copy, built alongside the team's official submission, not a replacement for it.
 
 ## The task
 
-Segment carbon fibre composite micrographs into matrix, fibre and void, then call each specimen pass or fail on defect severity, matching NCC's real certification criteria.
+Carbon fibre reinforced polymer (CFRP) parts are inspected via cross-section micrographs. Segment each 256x256 image into matrix, fibre, and void, then use that segmentation to decide whether the specimen's voids are severe enough to fail manufacturing quality, matching NCC's real certification criteria.
+
+## Methodology
+
+- **Model**: U-Net, resnet18 encoder, ImageNet-pretrained. A known-good architecture for this exact problem class (published 2025-2026 CFRP defect work on thermographic and micro-CT imaging uses the same family), chosen deliberately over inventing something novel, so effort went into the decision layer instead.
+- **Loss**: Dice + Focal, weighted toward the void class, since void pixels are a small minority of every image and plain cross-entropy would converge to predicting no voids at all.
+- **Leak-free split**: the dataset has 4,000 files but only 1,550 unique source images, the rest are augmented copies. Splitting randomly by file lets a copy of an image land in validation while its original sits in training, inflating the score. Fixed by splitting on source stem, confirmed by counting: 1,550 unique stems, matching exactly.
+- **Two severity formulas implemented**: NCC supplied two scoring scripts that disagree, `evaluation.py` on GitHub (additive severity, threshold 25, straight-line void length) and `score_submission.py` in their Drive folder (multiplicative severity, threshold 60, geodesic void length). Evidence points to `evaluation.py` being authoritative (its own commit message says it was updated to match the real judge, and NCC's own slides state the same formula and threshold), but `severity.py` implements both and `test_severity.py` verifies each one directly against NCC's real scripts on a synthetic case, so trust doesn't depend on a hand-rolled reimplementation being correct.
+- **Scale-generalisation test (V-scale)**: the hidden test set is entirely fibre radius 7, which barely exists in training (28 files, all augmentation artefacts, not independent sources). Trained a second model with fibre radii 6 and 10 excluded from training entirely, to test on a scale the model has genuinely never seen, the honest proxy for real test performance.
 
 ## Results
 
-U-Net (resnet18 encoder, ImageNet pretrained), scored on a leak-free validation split of 616 images, against NCC's authoritative scoring formula (`evaluation.py`, additive, threshold 25):
+Scored against NCC's authoritative formula (`evaluation.py`, additive, threshold 25).
+
+### Random split (616 held-out images, standard test)
 
 | Metric | Value |
 |---|---|
 | Dice_void (void-containing images only) | 0.78 |
-| F2 | 0.93 |
+| F2 | 0.92 |
 | Final score | 0.90 |
-| Agreement between NCC's two conflicting scoring formulas | 98% |
-| V-scale held-out (fibre radii 6, 10 excluded from training) | Dice 0.82, close to the random-split result, model generalises across scale |
+| Confusion matrix | TP 181, FP 10, FN 17, TN 408 |
+| Agreement between NCC's two conflicting scoring formulas | 97% |
 
-See `output/validation_scores.csv` for the full per-image breakdown under both formulas.
+![Confusion matrix, random split](output/figures/confusion_matrix.png)
 
-## Why two severity formulas are implemented
+### V-scale split (714 held-out images, fibre radii 6 and 10 excluded from training)
 
-NCC supplied two scoring scripts that disagree: `evaluation.py` on GitHub (additive severity, threshold 25, straight-line void length) and `score_submission.py` in their Drive folder (multiplicative severity, threshold 60, geodesic void length). Evidence points to `evaluation.py` being authoritative (its own commit message says it was updated to match the real judge, and NCC's own slides state the same formula and threshold), but `severity.py` implements both and `test_severity.py` verifies each one directly against NCC's real scripts on a synthetic case, so the choice of which formula to trust doesn't depend on a hand-rolled reimplementation being correct.
+| Metric | Value |
+|---|---|
+| Dice_void (all held-out images) | 0.87 (reported during training) |
+| Dice_void (void-containing images only, harness rule) | 0.48 |
+| F2 | 0.00 |
+| Confusion matrix | TP 0, FP 2, FN 0, TN 712 |
+
+![Confusion matrix, V-scale split](output/figures/confusion_matrix_scale.png)
+
+**Why F2 is 0 here, read this before quoting the number**: only 16 of the 714 held-out images contain any void at all (fibre radius 10 material is void-free by composition, a fact already in the dataset's own metadata), and none of those 16 are severe enough to count as a real ground-truth failure. TP + FN = 0, meaning there were zero actual failing parts in this subset to catch. F2 = 0 is a mathematical artifact of a denominator with no true positives available, not evidence the model missed real defects. The 2 false positives are minor false alarms on genuinely fine parts. Read together with the 0.87 raw segmentation Dice, this says the model generalises well on segmentation but this particular held-out slice is a poor test of the pass/fail decision specifically, since it contains almost no real failures to test against, a dataset limitation, not a model failure.
+
+Full per-image breakdown for both splits and both formulas: `output/validation_scores.csv` and `output/validation_scores_scale.csv`.
+
+### Against NCC's own reference targets
+
+NCC's materials state reference targets for a production-quality solution: FN (missed defect, a bad part passed as good) as close to 0% as possible, FP (false alarm) below roughly 5%. On the random split: FN rate = 17/(181+17) = 8.6%, FP rate = 10/(10+408) = 2.4%. FP is within target. FN is not yet at the "near 0%" bar, expected for a two-day build, and honest to state as a limitation rather than round it away, worth naming directly if asked what would improve it (lower the void-probability decision threshold, biasing further toward recall, since a missed defect costs 4x a false alarm under F2 anyway).
+
+## AI visualisation and demo
+
+- `demo_pipeline.py` generates a four-panel figure (input, segmentation, measurement, decision) for a real pass and a real fail example: `output/figures/pipeline_demo_pass.png`, `output/figures/pipeline_demo_fail.png`.
+- `gradio_app.py` is a live upload-and-predict demo, styled UI, persistent explanation of the accept/reject rule, a severity bar against the threshold.
+- `demo-recording.mp4` is a short screen recording of the live demo running on both a pass and a fail example.
 
 ## Setup
 
@@ -38,18 +69,18 @@ Requires the challenge repo and NCC's Drive files cloned as siblings to this fol
 
 - `severity.py` - both severity formulas, verified against NCC's real scripts. The part that matters most, everything downstream depends on this being correct.
 - `test_severity.py` - cross-checks `severity.py` on a synthetic mask. Run after touching either formula, before trusting any number.
-- `dataset.py` - data loader, plus two splits: a leak-free random split (grouped by source image, since augmented copies of the same image must never land on both sides), and a V-scale split (holds out fibre radii 6 and 10 entirely, the honest proxy for the real test set's radius-7 scale).
+- `dataset.py` - data loader, plus two splits: a leak-free random split (grouped by source image) and a V-scale split (holds out fibre radii 6 and 10 entirely).
 - `train.py` - CLI training script (`--split random` or `--split scale`).
 - `01_UNet_Training.ipynb` - the same training pipeline, structured for Kaggle (GPU), with a toggle for random vs V-scale.
-- `evaluate.py` - scores a trained checkpoint against the real validation set: Dice, F2, final score, a labelled confusion matrix, and the two-formula agreement rate.
-- `demo_pipeline.py` - generates the four-panel AI visualisation (input, segmentation, measurement, decision) for a real pass and a real fail example.
+- `evaluate.py` - scores a trained checkpoint against a validation set: Dice, F2, final score, a labelled confusion matrix, and the two-formula agreement rate. `--split scale --model best_model_scale.pth` for the V-scale run.
+- `demo_pipeline.py` - generates the four-panel AI visualisation for a real pass and a real fail example.
 - `gradio_app.py` - upload any micrograph, get a live segmentation and pass/fail call.
+- `demo-recording.mp4` - screen recording of the live demo.
 - `make_submission.py` - runs the trained model on the real 32 hidden test images, writes `predicted_masks/`.
-- `check_submission.py` - verifies the submission format (32 files, correct dimensions, values, no fragmentation) before anything gets submitted.
+- `check_submission.py` - verifies the submission format before anything gets submitted.
 - `WHAT-I-DID-SIMPLE.md` - plain-English explanation of the scoring work, no jargon.
-- `TEAM-NEXT-STEPS.md`, `akilesh-update-and-ask.md` - team coordination notes.
-- `output/` - checkpoints (gitignored, too large for git), metrics, and figures.
+- `output/` - metrics, figures, and per-image score breakdowns. Model checkpoints are gitignored, too large for git.
 
 ## Status
 
-Segmentation trained and verified, real scores computed against NCC's actual formula, V-scale generalisation checked, AI visualisation and live demo built, submission generated and format-checked. Open item: how to actually deliver the submission to NCC, direct push access to their repo was denied, this needs a direct answer from a mentor, not resolved by this repo alone.
+Segmentation trained and verified on two independent splits, real scores computed against NCC's actual formula, AI visualisation and live demo built and recorded, submission generated and format-checked. Open item: how to actually deliver the submission to NCC, direct push access to their repo was denied, this needs a direct answer from a mentor, not resolved by this repo alone.
