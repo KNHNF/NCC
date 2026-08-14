@@ -81,6 +81,12 @@ Requires the challenge repo and NCC's Drive files cloned as siblings to this fol
 - `WHAT-I-DID-SIMPLE.md` - plain-English explanation of the scoring work, no jargon.
 - `output/` - metrics, figures, and per-image score breakdowns. Model checkpoints are gitignored, too large for git.
 
+## Future work
+
+- **Batch processing**: today's demo takes one image at a time. NCC would run this over a full production batch, feed a folder of images in and get results back for all of them at once, a small extension, not a redesign.
+- **Autonomous agent**: watch a folder of new micrographs, run the pipeline automatically, and flag only borderline cases for human review, no manual upload needed.
+- 3D/micro-CT volumetric sizing, uncertainty-quantified severity scores, batch-level drift monitoring across a growing production run, and potentially the same defect-sizing approach applied to recycled or recovered composite material quality assessment.
+
 ## Status
 
 Segmentation trained and verified on two independent splits, real scores computed against NCC's actual formula, AI visualisation and live demo built and recorded, submission generated and format-checked. Open item: how to actually deliver the submission to NCC, direct push access to their repo was denied, this needs a direct answer from a mentor, not resolved by this repo alone.
